@@ -502,7 +502,7 @@
   <div class="water-ripple"></div>
   <div class="water-ripple"></div>
   <div class="mwss-logo-wrap">
-    <img src="https://i.ibb.co/cKkpkNBj/Horizontal-White.png" alt="MWSS Regulatory Office" style="max-width:340px;width:90%;height:auto;display:block;margin:0 auto 20px;">
+    <img src="https://i.ibb.co/KjjLW3nt/mwss-logo-horiz-flat-01.png" alt="MWSS Regulatory Office" style="max-width:340px;width:90%;height:auto;display:block;margin:0 auto 20px;">
   </div>
   <h1>ISO 9001:2015 Quality Management System Awareness</h1>
   <h2>Training Assessment</h2>
@@ -731,37 +731,43 @@
 </footer>
 
 <script>
+/* ── AIRTABLE CONFIG ── */
+const AIRTABLE_TOKEN = 'patFpx0NsfcfI2rqh.34a2dd5b31947161676bf32dc4192473bddf4c2bed16915892f9412c9bc7cab3';
+const AIRTABLE_BASE  = 'appk663EdFqPyCXb0';
+const AIRTABLE_TABLE = 'tblK0KualOcGWzx2G';
+
 const ANSWERS = {
   q1: 'b', q2: 'a', q3: 'b', q4: 'c', q5: 'b',
   q6: 'c', q7: 'b', q8: 'b', q9: 'b', q10: 'c',
   q11: 'F', q12: 'T', q13: 'T', q14: 'T', q15: 'T'
 };
 
-function submitTest() {
+async function submitTest() {
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
   let score = 0;
   const total = 15;
+  const responses = {};
 
-  // Lock all inputs
+  // Lock all inputs & collect answers
   document.querySelectorAll('input[type="radio"]').forEach(r => r.disabled = true);
 
   for (const [key, correct] of Object.entries(ANSWERS)) {
     const qNum = key.replace('q', '');
     const card = document.getElementById('qcard-' + qNum);
     const selected = document.querySelector(`input[name="${key}"]:checked`);
-    const selectedVal = selected ? selected.value : null;
+    const selectedVal = selected ? selected.value : '';
+    responses[key.toUpperCase()] = selectedVal ? selectedVal.toUpperCase() : '—';
 
-    // Find labels
     const isTF = parseInt(qNum) >= 11;
     const labels = card.querySelectorAll(isTF ? '.tf-label' : '.option-label');
 
     labels.forEach(label => {
-      const radioInput = label.querySelector('input');
-      const val = radioInput.value;
-      if (val === correct) {
-        label.classList.add('is-correct');
-      } else if (val === selectedVal && selectedVal !== correct) {
-        label.classList.add('is-wrong');
-      }
+      const val = label.querySelector('input').value;
+      if (val === correct)                              label.classList.add('is-correct');
+      else if (val === selectedVal && val !== correct)  label.classList.add('is-wrong');
     });
 
     if (selectedVal === correct) {
@@ -771,17 +777,63 @@ function submitTest() {
       card.classList.add('wrong');
     }
 
-    // Result tag
     const tag = document.createElement('div');
     tag.className = 'result-tag ' + (selectedVal === correct ? 'correct' : 'wrong');
     tag.innerHTML = selectedVal === correct
       ? '&#10003; Correct'
-      : (selectedVal ? '&#10007; Incorrect — Correct Answer: ' + correct.toUpperCase() : '&#10007; Not answered — Correct Answer: ' + correct.toUpperCase());
+      : (selectedVal
+          ? `&#10007; Incorrect — Correct Answer: ${correct.toUpperCase()}`
+          : `&#10007; Not answered — Correct Answer: ${correct.toUpperCase()}`);
     card.appendChild(tag);
   }
 
-  // Show result panel
-  const pct = (score / total) * 100;
+  const pct = Math.round((score / total) * 100 * 10) / 10;
+  let remarkText;
+  if (pct >= 80)      remarkText = 'Excellent';
+  else if (pct >= 60) remarkText = 'Good';
+  else if (pct >= 40) remarkText = 'Developing';
+  else                remarkText = 'Needs Training';
+
+  // ── AIRTABLE SUBMIT ──
+  const fields = {
+    'Submission Date': new Date().toISOString(),
+    'Organization Name': document.getElementById('org-name').value.trim() || '—',
+    'First Name':        document.getElementById('first-name').value.trim() || '—',
+    'Middle Initial':    document.getElementById('mi').value.trim() || '—',
+    'Last Name':         document.getElementById('last-name').value.trim() || '—',
+    'Q1':  responses['Q1'],  'Q2':  responses['Q2'],  'Q3':  responses['Q3'],
+    'Q4':  responses['Q4'],  'Q5':  responses['Q5'],  'Q6':  responses['Q6'],
+    'Q7':  responses['Q7'],  'Q8':  responses['Q8'],  'Q9':  responses['Q9'],
+    'Q10': responses['Q10'], 'Q11': responses['Q11'], 'Q12': responses['Q12'],
+    'Q13': responses['Q13'], 'Q14': responses['Q14'], 'Q15': responses['Q15'],
+    'Score':      score,
+    'Percentage': pct,
+    'Remarks':    remarkText
+  };
+
+  let saveStatus = '';
+  try {
+    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${AIRTABLE_TABLE}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${AIRTABLE_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fields })
+    });
+    if (res.ok) {
+      saveStatus = '&#10003; Results saved to Airtable';
+    } else {
+      const err = await res.json();
+      console.error('Airtable error:', err);
+      saveStatus = '&#9888; Could not save to Airtable — check console for details';
+    }
+  } catch (e) {
+    console.error('Network error:', e);
+    saveStatus = '&#9888; Network error — results not saved to Airtable';
+  }
+
+  // ── SHOW RESULT PANEL ──
   document.getElementById('score-num').textContent = score;
   document.getElementById('correct-count').textContent = score + ' Correct';
   document.getElementById('wrong-count').textContent = (total - score) + ' Incorrect';
@@ -798,21 +850,23 @@ function submitTest() {
     msg = 'The training will help build your understanding of ISO 9001:2015 QMS concepts.';
   } else {
     title = 'Great Starting Point!'; remark = '&#127959; Needs Training';
-    msg = 'This pre-test establishes your baseline. You\'ll gain solid QMS knowledge through the training.';
+    msg = "This pre-test establishes your baseline. You'll gain solid QMS knowledge through the training.";
   }
 
   document.getElementById('result-title').textContent = title;
   document.getElementById('result-msg').textContent = msg;
   document.getElementById('remark-text').innerHTML = remark;
 
+  // Inject save status below remark
+  const statusEl = document.createElement('p');
+  statusEl.innerHTML = saveStatus;
+  statusEl.style.cssText = 'margin-top:14px;font-size:12px;opacity:0.8;position:relative;z-index:1;';
+  document.getElementById('result-panel').appendChild(statusEl);
+
   const panel = document.getElementById('result-panel');
   panel.classList.add('show');
-
-  setTimeout(() => {
-    document.getElementById('score-bar').style.width = pct + '%';
-  }, 300);
-
-  document.getElementById('btn-submit').disabled = true;
+  setTimeout(() => { document.getElementById('score-bar').style.width = pct + '%'; }, 300);
+  btn.textContent = 'Submitted ✓';
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 </script>
